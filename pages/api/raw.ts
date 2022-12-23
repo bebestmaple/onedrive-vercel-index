@@ -71,7 +71,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if ('@microsoft.graph.downloadUrl' in data) {
       // Only proxy raw file content response for files up to 4MB
-      const url = data['@microsoft.graph.downloadUrl'] as string;
+      let url = data['@microsoft.graph.downloadUrl'] as string;
       if(oriDomain !== '' && replaceDomain !== ''){
         url = url.replace(oriDomain,replaceDomain)
       }
