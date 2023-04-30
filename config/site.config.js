@@ -56,7 +56,7 @@ module.exports = {
     //  link: 'https://github.com/bebestmaple/onedrive-vercel-index',
    // },
    // {
-   //   name: 'Telegram',
+   //   name: 'Telegram', 
    //   link: 'https://t.me/realSpencerWoo',
    // },
   ],
