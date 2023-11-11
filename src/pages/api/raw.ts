@@ -4,7 +4,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import axios, { AxiosResponseHeaders } from 'axios'
 import Cors from 'cors'
 
-import { driveApi, cacheControlHeader,oriDomain,replaceDomain } from '../../../config/api.config'
+import { driveApi, cacheControlHeader } from '../../../config/api.config'
 import { encodePath, getAccessToken, checkAuthRoute } from '.'
 
 // CORS middleware for raw links: https://nextjs.org/docs/api-routes/api-middlewares
@@ -55,6 +55,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Conversely, protected routes are not allowed to serve from cache.
   if (message !== '') {
     res.setHeader('Cache-Control', 'no-cache')
+    res.setHeader('X-Need-NoCache', 'yes')  // Add an extra header
   }
 
   await runCorsMiddleware(req, res)
@@ -65,33 +66,38 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       headers: { Authorization: `Bearer ${accessToken}` },
       params: {
         // OneDrive international version fails when only selecting the downloadUrl (what a stupid bug)
-        select: 'id,size,@microsoft.graph.downloadUrl',
+        select: 'id,name,size,@microsoft.graph.downloadUrl',
       },
     })
 
+    // For security reasons, .password files cant be downloaded.
+    if (data?.name === '.password') {
+      res.status(403).json({ error: 'For security reasons, this file can\'t be downloaded.' })
+      return
+    }
+
     if ('@microsoft.graph.downloadUrl' in data) {
       // Only proxy raw file content response for files up to 4MB
-      let url = data['@microsoft.graph.downloadUrl'] as string;
-      if(oriDomain !== '' && replaceDomain !== ''){
-        url = url.replace(oriDomain,replaceDomain)
-      }
       if (proxy && 'size' in data && data['size'] < 4194304) {
-        const { headers, data: stream } = await axios.get(url, {
+        const { headers, data: stream } = await axios.get(data['@microsoft.graph.downloadUrl'] as string, {
           responseType: 'stream',
         })
         headers['Cache-Control'] = cacheControlHeader
+        // If already has attachment header in response, don't overwrite it
+        headers['Content-Disposition'] = res.getHeader('content-disposition') ?? `attachment; filename="${data['name']}"` as string
         // Send data stream as response
         res.writeHead(200, headers as AxiosResponseHeaders)
         stream.pipe(res)
       } else {
-        res.redirect(url)
+        // Redirect to download url
+        res.redirect(302, data['@microsoft.graph.downloadUrl'] as string)
       }
     } else {
       res.status(404).json({ error: 'No download url found.' })
     }
     return
   } catch (error: any) {
-    res.status(error?.response?.status ?? 500).json({ error: error?.response?.data ?? 'Internal server error.' })
+    res.status(error?.response?.status ?? 500).json({ error: error?.response?.data?.error ?? 'Internal server error.' })
     return
   }
 }

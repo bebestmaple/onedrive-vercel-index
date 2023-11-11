@@ -146,7 +146,8 @@ export const Downloading: FC<{ title: string; style: string }> = ({ title, style
   )
 }
 
-const FileListing: FC<{ query?: ParsedUrlQuery }> = ({ query }) => {
+
+const FileListing: FC<{ query?: ParsedUrlQuery, renderedData?: any }> = ({ query, renderedData }) => {
   const [selected, setSelected] = useState<{ [key: string]: boolean }>({})
   const [totalSelected, setTotalSelected] = useState<0 | 1 | 2>(0)
   const [totalGenerating, setTotalGenerating] = useState<boolean>(false)
@@ -162,7 +163,9 @@ const FileListing: FC<{ query?: ParsedUrlQuery }> = ({ query }) => {
 
   const path = queryToPath(query)
 
-  const { data, error, size, setSize } = useProtectedSWRInfinite(path)
+  // console.debug(renderedData);
+
+  const { data, error, size, setSize } = useProtectedSWRInfinite(path, renderedData)
 
   if (error) {
     // If error includes 403 which means the user has not completed initial setup, redirect to OAuth page
@@ -199,6 +202,9 @@ const FileListing: FC<{ query?: ParsedUrlQuery }> = ({ query }) => {
 
     // Find README.md file to render
     const readmeFile = folderChildren.find(c => c.name.toLowerCase() === 'readme.md')
+
+    // Find HEAD.md file to render
+    const headFile = folderChildren.find(c => c.name.toLowerCase() === 'head.md')
 
     // Filtered file list helper
     const getFiles = () => folderChildren.filter(c => !c.folder && c.name !== '.password')
@@ -343,6 +349,12 @@ const FileListing: FC<{ query?: ParsedUrlQuery }> = ({ query }) => {
       <>
         <Toaster />
 
+        {(renderedData.head?.length > 0 || headFile) && (
+          <div className="mb-4">
+            <MarkdownPreview file={headFile} path={path} standalone={false} setContent={renderedData.head} />
+          </div>
+        )}
+
         {layout.name === 'Grid' ? <FolderGridLayout {...folderProps} /> : <FolderListLayout {...folderProps} />}
 
         {!onlyOnePage && (
@@ -357,9 +369,8 @@ const FileListing: FC<{ query?: ParsedUrlQuery }> = ({ query }) => {
                   : t('of {{count}} file(s) -', { count: folderChildren.length, context: 'loaded' }))}
             </div>
             <button
-              className={`flex w-full items-center justify-center space-x-2 p-3 disabled:cursor-not-allowed ${
-                isLoadingMore || isReachingEnd ? 'opacity-60' : 'hover:bg-gray-100 dark:hover:bg-gray-850'
-              }`}
+              className={`flex w-full items-center justify-center space-x-2 p-3 disabled:cursor-not-allowed ${isLoadingMore || isReachingEnd ? 'opacity-60' : 'hover:bg-gray-100 dark:hover:bg-gray-850'
+                }`}
               onClick={() => setSize(size + 1)}
               disabled={isLoadingMore || isReachingEnd}
             >
@@ -380,9 +391,9 @@ const FileListing: FC<{ query?: ParsedUrlQuery }> = ({ query }) => {
           </div>
         )}
 
-        {readmeFile && (
+        {(renderedData.readme?.length > 0 || readmeFile) && (
           <div className="mt-4">
-            <MarkdownPreview file={readmeFile} path={path} standalone={false} />
+            <MarkdownPreview file={readmeFile} path={path} standalone={false} setContent={renderedData.readme} />
           </div>
         )}
       </>

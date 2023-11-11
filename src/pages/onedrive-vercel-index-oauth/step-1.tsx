@@ -5,15 +5,53 @@ import { useTranslation, Trans } from 'next-i18next'
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations'
 
 import siteConfig from '../../../config/site.config'
-import apiConfig from '../../../config/api.config'
 import Navbar from '../../components/Navbar'
 import Footer from '../../components/Footer'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { getAuthPersonInfo } from '../../utils/oAuthHandler'
+import { getAccessToken } from '../api'
+import Folders from '../[...path]'
 
-export default function OAuthStep1() {
-  const router = useRouter()
+/**
+ * Protect the secret information.
+ * 
+ * @param text information
+ * @returns 
+ */
+function addStarsAndTrim(text: string): string {
+  if (text.length <= 10) {
+    return '**********';
+  }
 
+  const prefix = text.substring(0, 5);
+  const suffix = text.substring(text.length - 5);
+  const stars = '*'.repeat(text.length - 10);
+
+  return `${prefix}${stars}${suffix}`;
+}
+
+
+async function checkInstalled(): Promise<boolean> {
+  const access_token = await getAccessToken();
+  if (!access_token) return false;
+  try {
+    const { status } = await getAuthPersonInfo(access_token);
+    if (status !== 200) return false;
+  } catch (error: any) {
+    return false;
+  }
+  return true;
+}
+
+
+export default function OAuthStep1({ installed, apiConfig, build_id }) {
   const { t } = useTranslation()
+
+  const router = useRouter()
+  if (installed) {
+    router.query.path = router.pathname.substring(1).split('/')
+    return Folders(build_id)
+  }
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-white dark:bg-gray-900">
@@ -30,12 +68,12 @@ export default function OAuthStep1() {
               <Image src="/images/fabulous-fireworks.png" width={912} height={912} alt="fabulous fireworks" priority />
             </div>
             <h3 className="mb-4 text-center text-xl font-medium">
-              {t('Welcome to your new onedrive-vercel-index 🎉')}
+              {t('Welcome to your new onedrive-docker-index 🎉')}
             </h3>
 
             <h3 className="mt-4 mb-2 text-lg font-medium">{t('Step 1/3: Preparations')}</h3>
 
-            <p className="py-1 text-sm font-medium text-yellow-400">
+            {/* <p className="py-1 text-sm font-medium text-yellow-400">
               <Trans>
                 <FontAwesomeIcon icon="exclamation-triangle" className="mr-1" /> If you have not specified a REDIS_URL
                 inside your Vercel env variable, go initialise one at{' '}
@@ -53,7 +91,7 @@ export default function OAuthStep1() {
                 </a>
                 .
               </Trans>
-            </p>
+            </p> */}
 
             <p className="py-1">
               <Trans>
@@ -81,7 +119,7 @@ export default function OAuthStep1() {
                       CLIENT_SECRET*
                     </td>
                     <td className="whitespace-nowrap py-1 px-3 text-gray-500 dark:text-gray-400">
-                      <code className="font-mono text-sm">{apiConfig.obfuscatedClientSecret}</code>
+                      <code className="font-mono text-sm">{apiConfig.clientSecret}</code>
                     </td>
                   </tr>
                   <tr className="border-y bg-white dark:border-gray-700 dark:bg-gray-900">
@@ -142,15 +180,24 @@ export default function OAuthStep1() {
         </div>
       </main>
 
-      <Footer />
+      <Footer BuildId={build_id} />
     </div>
   )
 }
 
+import apiConfig from '../../../config/api.config';
+import getBuildId from '../../utils/buildIdHelper'
 export async function getServerSideProps({ locale }) {
+
   return {
     props: {
       ...(await serverSideTranslations(locale, ['common'])),
+      installed: await checkInstalled(),
+      apiConfig: {
+        ...apiConfig,
+        clientSecret: addStarsAndTrim(apiConfig.clientSecret)
+      },
+      build_id: getBuildId()
     },
   }
 }

@@ -10,18 +10,49 @@ import siteConfig from '../../../config/site.config'
 import Navbar from '../../components/Navbar'
 import Footer from '../../components/Footer'
 import { LoadingIcon } from '../../components/Loading'
-import { extractAuthCodeFromRedirected, generateAuthorisationUrl } from '../../utils/oAuthHandler'
+import { generateAuthorisationUrl, getAuthPersonInfo } from '../../utils/oAuthHandler'
+import { getAccessToken } from '../api'
+import Folders from '../[...path]'
+import apiConfig from '../../../config/api.config'
+import getBuildId from '../../utils/buildIdHelper'
 
-export default function OAuthStep2() {
+async function checkInstalled(): Promise<boolean> {
+  const access_token = await getAccessToken();
+  if (!access_token) return false;
+  try {
+    const { status } = await getAuthPersonInfo(access_token);
+    if (status !== 200) return false;
+  } catch (error: any) {
+    return false;
+  }
+  return true;
+}
+
+
+export default function OAuthStep2({ installed, redirectUri, oAuthUrl, build_id }) {
   const router = useRouter()
 
   const [oAuthRedirectedUrl, setOAuthRedirectedUrl] = useState('')
   const [authCode, setAuthCode] = useState('')
   const [buttonLoading, setButtonLoading] = useState(false)
 
+  function extractAuthCodeFromRedirected(url: string): string {
+    // Return empty string if the url is not the defined redirect uri
+    if (!url.startsWith(redirectUri)) {
+      return ''
+    }
+
+    // New URL search parameter
+    const params = new URLSearchParams(url.split('?')[1])
+    return params.get('code') ?? ''
+  }
+
   const { t } = useTranslation()
 
-  const oAuthUrl = generateAuthorisationUrl()
+  if (installed) {
+    router.query.path = router.pathname.substring(1).split('/')
+    return Folders(build_id)
+  }
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-white dark:bg-gray-900">
@@ -44,7 +75,7 @@ export default function OAuthStep2() {
               />
             </div>
             <h3 className="mb-4 text-center text-xl font-medium">
-              {t('Welcome to your new onedrive-vercel-index 🎉')}
+              {t('Welcome to your new onedrive-docker-index 🎉')}
             </h3>
 
             <h3 className="mt-4 mb-2 text-lg font-medium">{t('Step 2/3: Get authorisation code')}</h3>
@@ -86,11 +117,10 @@ export default function OAuthStep2() {
             </div>
 
             <input
-              className={`my-2 w-full flex-1 rounded border bg-gray-50 p-2 font-mono text-sm font-medium focus:outline-none focus:ring dark:bg-gray-800 dark:text-white ${
-                authCode
-                  ? 'border-green-500/50 focus:ring-green-500/30 dark:focus:ring-green-500/40'
-                  : 'border-red-500/50 focus:ring-red-500/30 dark:focus:ring-red-500/40'
-              }`}
+              className={`my-2 w-full flex-1 rounded border bg-gray-50 p-2 font-mono text-sm font-medium focus:outline-none focus:ring dark:bg-gray-800 dark:text-white ${authCode
+                ? 'border-green-500/50 focus:ring-green-500/30 dark:focus:ring-green-500/40'
+                : 'border-red-500/50 focus:ring-red-500/30 dark:focus:ring-red-500/40'
+                }`}
               autoFocus
               type="text"
               placeholder="http://localhost/?code=M.R3_BAY.c0..."
@@ -136,7 +166,7 @@ export default function OAuthStep2() {
         </div>
       </main>
 
-      <Footer />
+      <Footer BuildId={build_id} />
     </div>
   )
 }
@@ -145,6 +175,10 @@ export async function getServerSideProps({ locale }) {
   return {
     props: {
       ...(await serverSideTranslations(locale, ['common'])),
+      installed: await checkInstalled(),
+      redirectUri: apiConfig.redirectUri,
+      oAuthUrl: generateAuthorisationUrl(),
+      build_id: getBuildId()
     },
   }
 }

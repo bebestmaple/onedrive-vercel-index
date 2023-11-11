@@ -10,11 +10,46 @@ import siteConfig from '../../../config/site.config'
 import Navbar from '../../components/Navbar'
 import Footer from '../../components/Footer'
 
-import { getAuthPersonInfo, requestTokenWithAuthCode, sendTokenToServer } from '../../utils/oAuthHandler'
+import { getAuthPersonInfo, requestTokenWithAuthCode } from '../../utils/oAuthHandler'
 import { LoadingIcon } from '../../components/Loading'
+import { getAccessToken } from '../api'
+import Folders from '../[...path]'
+import axios from 'axios'
+import getBuildId from '../../utils/buildIdHelper'
 
-export default function OAuthStep3({ accessToken, expiryTime, refreshToken, error, description, errorUri }) {
+
+async function checkInstalled(): Promise<boolean> {
+  const access_token = await getAccessToken();
+  if (!access_token) return false;
+  try {
+    const { status } = await getAuthPersonInfo(access_token);
+    if (status !== 200) return false;
+  } catch (error: any) {
+    return false;
+  }
+  return true;
+}
+
+async function sendTokenToServer(accessToken: string, refreshToken: string, expiryTime: string) {
+  return await axios.post(
+    '/api',
+    {
+      obfuscatedAccessToken: accessToken,
+      accessTokenExpiry: parseInt(expiryTime),
+      obfuscatedRefreshToken: refreshToken,
+    },
+    {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    }
+  )
+}
+
+
+export default function OAuthStep3({ accessToken, expiryTime, refreshToken, error, description, errorUri, installed, build_id }) {
   const router = useRouter()
+
   const [expiryTimeLeft, setExpiryTimeLeft] = useState(expiryTime)
 
   const { t } = useTranslation()
@@ -29,12 +64,18 @@ export default function OAuthStep3({ accessToken, expiryTime, refreshToken, erro
     return () => clearInterval(intervalId)
   }, [expiryTimeLeft])
 
+
   const [buttonContent, setButtonContent] = useState(
     <div>
       <span>{t('Store tokens')}</span> <FontAwesomeIcon icon="key" />
     </div>
   )
   const [buttonError, setButtonError] = useState(false)
+
+  if (installed) {
+    router.query.path = router.pathname.substring(1).split('/')
+    return Folders(build_id)
+  }
 
   const sendAuthTokensToServer = async () => {
     setButtonError(false)
@@ -43,27 +84,6 @@ export default function OAuthStep3({ accessToken, expiryTime, refreshToken, erro
         <span>{t('Storing tokens')}</span> <LoadingIcon className="ml-1 inline h-4 w-4 animate-spin" />
       </div>
     )
-
-    // verify identity of the authenticated user with the Microsoft Graph API
-    const { data, status } = await getAuthPersonInfo(accessToken)
-    if (status !== 200) {
-      setButtonError(true)
-      setButtonContent(
-        <div>
-          <span>{t('Error validating identify, restart')}</span> <FontAwesomeIcon icon="exclamation-circle" />
-        </div>
-      )
-      return
-    }
-    if (data.userPrincipalName !== siteConfig.userPrincipalName) {
-      setButtonError(true)
-      setButtonContent(
-        <div>
-          <span>{t('Do not pretend to be the site owner')}</span> <FontAwesomeIcon icon="exclamation-circle" />
-        </div>
-      )
-      return
-    }
 
     await sendTokenToServer(accessToken, refreshToken, expiryTime)
       .then(() => {
@@ -77,11 +97,12 @@ export default function OAuthStep3({ accessToken, expiryTime, refreshToken, erro
           router.push('/')
         }, 2000)
       })
-      .catch(_ => {
+      .catch(data => {
+        // console.log(data);
         setButtonError(true)
         setButtonContent(
           <div>
-            <span>{t('Error storing the token')}</span> <FontAwesomeIcon icon="exclamation-circle" />
+            <span>{t('Failed')}: {t(data.response.data)}</span> <FontAwesomeIcon icon="exclamation-circle" />
           </div>
         )
       })
@@ -108,7 +129,7 @@ export default function OAuthStep3({ accessToken, expiryTime, refreshToken, erro
               />
             </div>
             <h3 className="mb-4 text-center text-xl font-medium">
-              {t('Welcome to your new onedrive-vercel-index 🎉')}
+              {t('Welcome to your new onedrive-docker-index 🎉')}
             </h3>
 
             <h3 className="mt-4 mb-2 text-lg font-medium">{t('Step 3/3: Get access and refresh tokens')}</h3>
@@ -202,11 +223,10 @@ export default function OAuthStep3({ accessToken, expiryTime, refreshToken, erro
 
                 <div className="mb-2 mt-6 text-right">
                   <button
-                    className={`rounded-lg bg-gradient-to-br px-4 py-2.5 text-center text-sm font-medium text-white hover:bg-gradient-to-bl focus:ring-4 ${
-                      buttonError
-                        ? 'from-red-500 to-orange-400 focus:ring-red-200 dark:focus:ring-red-800'
-                        : 'from-green-500 to-teal-300 focus:ring-green-200 dark:focus:ring-green-800'
-                    }`}
+                    className={`rounded-lg bg-gradient-to-br px-4 py-2.5 text-center text-sm font-medium text-white hover:bg-gradient-to-bl focus:ring-4 ${buttonError
+                      ? 'from-red-500 to-orange-400 focus:ring-red-200 dark:focus:ring-red-800'
+                      : 'from-green-500 to-teal-300 focus:ring-green-200 dark:focus:ring-green-800'
+                      }`}
                     onClick={sendAuthTokensToServer}
                   >
                     {buttonContent}
@@ -218,13 +238,22 @@ export default function OAuthStep3({ accessToken, expiryTime, refreshToken, erro
         </div>
       </main>
 
-      <Footer />
+      <Footer BuildId={build_id} />
     </div>
   )
 }
 
 export async function getServerSideProps({ query, locale }) {
   const { authCode } = query
+
+  const installed = await checkInstalled();
+  if (installed) {
+    return {
+      props: {
+        installed
+      }
+    }
+  }
 
   // Return if no auth code is present
   if (!authCode) {
@@ -245,7 +274,7 @@ export async function getServerSideProps({ query, locale }) {
       props: {
         error: response.error,
         description: response.errorDescription,
-        errorUri: response.errorUri,
+        errorUri: response.errorUri ? response.errorUri : '',
         ...(await serverSideTranslations(locale, ['common'])),
       },
     }
@@ -260,6 +289,7 @@ export async function getServerSideProps({ query, locale }) {
       accessToken,
       refreshToken,
       ...(await serverSideTranslations(locale, ['common'])),
+      build_id: getBuildId()
     },
   }
 }

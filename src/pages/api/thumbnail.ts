@@ -39,6 +39,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
   const cleanPath = pathPosix.resolve('/', pathPosix.normalize(path))
 
+  // Path shoudn't cotain :
+  if (cleanPath.includes(':')) {
+    res.status(400).json({ error: 'Path invalid.' })
+    return
+  }
+
   const { code, message } = await checkAuthRoute(cleanPath, accessToken, odpt as string)
   // Status code other than 200 means user has not authenticated yet
   if (code !== 200) {
@@ -49,6 +55,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Conversely, protected routes are not allowed to serve from cache.
   if (message !== '') {
     res.setHeader('Cache-Control', 'no-cache')
+    res.setHeader('X-Need-NoCache', 'yes')  // Add an extra header
   }
 
   const requestPath = encodePath(cleanPath)
@@ -58,18 +65,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const isRoot = requestPath === ''
 
   try {
-    const { data } = await axios.get(`${requestUrl}${isRoot ? '' : ':'}/thumbnails`, {
+    const { thumbnails: data, name: filename } = await axios.get(`${requestUrl}${isRoot ? '' : ':'}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
-    })
+      params: {
+        select: 'name',
+        expand: 'thumbnails'
+      },
+    }).then(res => res.data)
 
-    const thumbnailUrl = data.value && data.value.length > 0 ? (data.value[0] as OdThumbnail)[size].url : null
+    if (filename === '.password') {
+      res.status(400).json({ error: 'The item is protected.' })
+      return
+    }
+
+    const thumbnailUrl = data && data.length > 0 ? (data[0] as OdThumbnail)[size].url : null
     if (thumbnailUrl) {
       res.redirect(thumbnailUrl)
     } else {
       res.status(400).json({ error: "The item doesn't have a valid thumbnail." })
     }
   } catch (error: any) {
-    res.status(error?.response?.status).json({ error: error?.response?.data ?? 'Internal server error.' })
+    res.status(error?.response?.status).json({ error: error?.response?.data?.error ?? 'Internal server error.' })
   }
   return
 }

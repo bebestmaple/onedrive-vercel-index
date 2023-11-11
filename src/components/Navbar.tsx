@@ -14,6 +14,7 @@ import siteConfig from '../../config/site.config'
 import SearchModal from './SearchModal'
 import SwitchLang from './SwitchLang'
 import useDeviceOS from '../utils/useDeviceOS'
+import { getStoredToken } from '../utils/protectedRouteHandler'
 
 const Navbar = () => {
   const router = useRouter()
@@ -49,6 +50,7 @@ const Navbar = () => {
 
     siteConfig.protectedRoutes.forEach(r => {
       localStorage.removeItem(r)
+      document.cookie = `token_${encodeURIComponent(r)}= ;expires=${(new Date()).toUTCString()}`
     })
 
     toast.success(t('Cleared all tokens'))
@@ -58,7 +60,7 @@ const Navbar = () => {
   }
 
   return (
-    <div className="sticky top-0 z-[100] border-b border-gray-900/10 bg-white bg-opacity-80 backdrop-blur-md dark:border-gray-500/30 dark:bg-gray-900">
+    <div className="sticky top-0 z-[100] border-b border-gray-900/10 bg-white bg-opacity-80 backdrop-blur-md dark:border-gray-500/30 dark:bg-gray-900 !bg-opacity-50">
       <Toaster />
 
       <SearchModal searchOpen={searchOpen} setSearchOpen={setSearchOpen} />
@@ -110,7 +112,7 @@ const Navbar = () => {
             ))}
 
           {siteConfig.email && (
-            <a href={siteConfig.email} className="flex items-center space-x-2 hover:opacity-80 dark:text-white">
+            <a href={siteConfig.email} className="flex items-center space-x-2 hover:opacity-80 dark:text-white" aria-label={t('Email')}>
               <FontAwesomeIcon icon={['far', 'envelope']} />
               <span className="hidden text-sm font-medium md:inline-block">{t('Email')}</span>
             </a>
@@ -129,8 +131,8 @@ const Navbar = () => {
       </div>
 
       <Transition appear show={isOpen} as={Fragment}>
-        <Dialog as="div" className="fixed inset-0 z-10 overflow-y-auto" open={isOpen} onClose={() => setIsOpen(false)}>
-          <div className="min-h-screen px-4 text-center">
+        <Dialog as="div" className="fixed inset-0 z-10 overflow-y-auto backdrop-blur-md !bg-opactiy-50" open={isOpen} onClose={() => setIsOpen(false)}>
+          <div className="min-h-screen px-4 text-center !bg-opactiy-50">
             <Transition.Child
               as={Fragment}
               enter="ease-out duration-100"
@@ -140,11 +142,11 @@ const Navbar = () => {
               leaveFrom="opacity-100"
               leaveTo="opacity-0"
             >
-              <Dialog.Overlay className="fixed inset-0 bg-gray-50 dark:bg-gray-800" />
+              <Dialog.Overlay className="fixed inset-0 bg-gray-50 dark:bg-gray-800 !bg-opacity-50" />
             </Transition.Child>
 
             {/* This element is to trick the browser into centering the modal contents. */}
-            <span className="inline-block h-screen align-middle" aria-hidden="true">
+            <span className="inline-block h-screen align-middle backdrop-blur-md !bg-opactiy-80" aria-hidden="true">
               &#8203;
             </span>
             <Transition.Child
@@ -156,7 +158,7 @@ const Navbar = () => {
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <div className="my-8 inline-block w-full max-w-md transform overflow-hidden rounded-lg bg-white p-6 text-left align-middle transition-all dark:bg-gray-900">
+              <div className="my-8 inline-block w-full max-w-md transform overflow-hidden rounded-lg bg-white p-6 text-left align-middle transition-all dark:bg-gray-900 backdrop-blur-md !bg-opacity-80">
                 <Dialog.Title className="text-lg font-bold text-gray-900 dark:text-gray-100">
                   {t('Clear all tokens?')}
                 </Dialog.Title>
@@ -168,12 +170,17 @@ const Navbar = () => {
                 </div>
 
                 <div className="mt-4 max-h-32 overflow-y-scroll font-mono text-sm dark:text-gray-100">
-                  {siteConfig.protectedRoutes.map((r, i) => (
-                    <div key={i} className="flex items-center space-x-1">
-                      <FontAwesomeIcon icon="key" />
-                      <span className="truncate">{r}</span>
-                    </div>
-                  ))}
+                  {siteConfig.protectedRoutes.map((r, i) => {
+                    return getStoredToken(r.split('/')
+                      .map(p => encodeURIComponent(p))
+                      .join('/')) &&
+                      (
+                        <div key={i} className="flex items-center space-x-1">
+                          <FontAwesomeIcon icon="key" />
+                          <span className="truncate">{r}</span>
+                        </div>
+                      )
+                  })}
                 </div>
 
                 <div className="mt-8 flex items-center justify-end">
