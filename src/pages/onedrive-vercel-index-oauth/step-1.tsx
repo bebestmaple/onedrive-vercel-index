@@ -68,7 +68,7 @@ export default function OAuthStep1({ installed, apiConfig, build_id }) {
               <Image src="/images/fabulous-fireworks.png" width={912} height={912} alt="fabulous fireworks" priority />
             </div>
             <h3 className="mb-4 text-center text-xl font-medium">
-              {t('Welcome to your new onedrive-docker-index 🎉')}
+              {t('Welcome to your new onedrive-vercel-index 🎉')}
             </h3>
 
             <h3 className="mt-4 mb-2 text-lg font-medium">{t('Step 1/3: Preparations')}</h3>
